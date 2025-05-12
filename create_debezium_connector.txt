@@ -1,13 +1,13 @@
 curl -i -X POST -H "Accept:application/json" -H "Content-Type:application/json" \
 http://localhost:8083/connectors/ -d '{
-  "name": "mysql-xyscheduler-appointment-summary-connector",
+  "name": "mysql-scheduler-appointment-summary-connector",
   "config": {
     "connector.class": "io.debezium.connector.mysql.MySqlConnector",
     "tasks.max": "1",
     "database.hostname": "host.docker.internal",
     "database.port": "3306",
     "database.user": "debezium",
-    "database.password": "dbz",
+    "database.password": "<passoword>",
     "database.server.id": "184054",
     "topic.prefix": "appointments",
     "database.include.list": "scheduler",
@@ -18,5 +18,5 @@ http://localhost:8083/connectors/ -d '{
     "database.connectionTimeZone": "America/Denver"
   }
 }'
-curl http://localhost:8083/connectors/mysql-xyscheduler-appointment-summary-connector/status
+
 
