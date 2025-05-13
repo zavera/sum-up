@@ -2,6 +2,7 @@
 from kafka import KafkaConsumer
 import json
 import logging
+from create_faiss_embeddings import embed_message
 
 
 def main():
@@ -24,9 +25,10 @@ def main():
         # Debezium CDC event structure: { 'payload': { 'after': {...}, ... } }
         after = payload.get('after')
         if after:
-            print(after)
-            logging.info(f"Processed row: {after}")
+            #print(after)
+            #logging.info(f"Processed row: {after}")
             #logging.info(f"Vector embedding: {embedding}")
+            embed_message(after)
             # Insert your FAISS logic here
 
 if __name__ == "__main__":
