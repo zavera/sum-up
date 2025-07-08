@@ -20,7 +20,7 @@ SELECT
 FROM
     visit_template vt
         LEFT JOIN
-    booked_visit bv ON vt.id = bv.visit_id
+    booked_visit bv ON vt.id = bv.visit_template
         LEFT JOIN
     study s ON bv.study = s.id
         LEFT JOIN

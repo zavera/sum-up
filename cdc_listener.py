@@ -2,7 +2,7 @@
 from kafka import KafkaConsumer
 import json
 import logging
-from create_faiss_embeddings import embed_message
+from create_chromadb_embeddings import embed_message
 
 
 def main():
@@ -33,7 +33,7 @@ def main():
             #logging.info(f"Processed row: {after}")
             #logging.info(f"Vector embedding: {embedding}")
             embed_message(after)
-            logging.info(f"Proccessed row:  {after}")
+            #logging.info(f"Processed row:  {after}")
             # Insert your FAISS logic here
 
 if __name__ == "__main__":
