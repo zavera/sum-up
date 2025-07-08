@@ -1,3 +1,5 @@
+import logging
+
 import numpy as np
 import faiss
 from sentence_transformers import SentenceTransformer
@@ -7,10 +9,10 @@ from load_faiss_embeddings import faiss_index
 # Example: initialize or load these globally in your script
 EMBEDDING_DIM = 384  # or your model's dimension
 INDEX_PATH = "/tmp/faiss_index"
-EMBEDDING_FIELDS = ["field1", "field2"]  # list of fields to concatenate for embedding
-ID_FIELD = "id"
+ # list of fields to concatenate for embedding
+ID_FIELD = "appointment_id"
 model = SentenceTransformer("all-MiniLM-L6-v2")
-
+#after = {'appointment_id': 72, 'patient_id': 48, 'patient_name': 'De7t99zU9lXw3h1szPXDeA== bcpLWaP+AbezKEHCpcvjPA==', 'patient_mrn': 'GnJx1AApe5n0xORtt+ptJQ==', 'scheduled_start_time': 1747521000000, 'scheduled_end_time': 1747695600000, 'visit_type': 'Inpatient CRC', 'visit_template': 'In 11:30 PM Resource Blocker', 'study_name': 'Scheduling Special Cases', 'appointment_status': 'Checked-In', 'appointment_status_reason': None, 'comment': 'wohooo!'}
 
 def save_faiss_index(index, index_path):
     faiss.write_index(index, index_path)
@@ -22,7 +24,9 @@ def embed_message(after):
     """
     try:
         # Compose the text to embed from specified fields
-        text = " ".join(str(after.get(f, "")) for f in EMBEDDING_FIELDS if after.get(f))
+        text = " ".join(str(after.get(f, "")) for f in after if after.get(f) if f != 'appointment_id')
+        print(text)
+        logging.info(text)
         if not text.strip():
             return  # Nothing to embed
 
@@ -40,3 +44,9 @@ def embed_message(after):
 
     except Exception as e:
         print(f"Error embedding message {after}: {e}")
+
+def main():
+    print("this is a test.")
+    #embed_message(after)
+if __name__ == "__main__":
+    main()

@@ -1,14 +1,14 @@
 DELIMITER $$
 
-CREATE TRIGGER after_visit_insert
-    AFTER INSERT ON visit
+CREATE TRIGGER after_visit_template_insert
+    AFTER INSERT ON visit_template
     FOR EACH ROW
 BEGIN
     CALL populate_visit_details_report();
     END$$
 
-    CREATE TRIGGER after_visit_update
-        AFTER UPDATE ON visit
+    CREATE TRIGGER after_visit_template_update
+        AFTER UPDATE ON visit_template
         FOR EACH ROW
     BEGIN
         CALL populate_visit_details_report();
