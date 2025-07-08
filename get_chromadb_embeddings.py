@@ -27,10 +27,18 @@ def call_slm_api(prompt):
     try:
         response = requests.post(url, json=payload, headers=headers)
         response.raise_for_status()
-        print("Raw SLM API response text:", response.text)
-        data = response.json()
-        print("Raw SLM API response:", data)
-        return data.get("response") or data.get("result") or data
+        # Parse each line as a JSON object and collect the 'response' field
+        lines = response.text.strip().splitlines()
+        paragraph = ""
+        for line in lines:
+            try:
+                obj = json.loads(line)
+                paragraph += obj.get("response", "")
+            except Exception as e:
+                print(f"Error parsing line: {line}\n{e}")
+        print("SLM API Response (paragraph):")
+        print(paragraph)
+        return paragraph
     except requests.exceptions.RequestException as e:
         print(f"Error calling SLM API: {e}")
         return None
