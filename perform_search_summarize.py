@@ -5,7 +5,7 @@ from sentence_transformers import SentenceTransformer
 from transformers import T5Tokenizer, T5ForConditionalGeneration
 
 from huggingface_hub import InferenceClient
-HF_TOKEN='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'
+
 
 client = InferenceClient(token=HF_TOKEN)
 
