@@ -1,5 +1,4 @@
-#!/usr/bin/env python3
-
+from flask import Flask, request, Response, stream_with_context, jsonify
 import numpy as np
 from sentence_transformers import SentenceTransformer
 import requests
@@ -14,98 +13,119 @@ COLLECTION_NAME = "appointments"
 ID_TO_RECORD_PATH = "/tmp/id_to_record.pkl"
 
 model = SentenceTransformer("all-MiniLM-L6-v2")
+ID_FIELDS = ["appointment_id", "visit_id", "resource_id"]
 
-def call_slm_api(prompt):
-    url = "http://35.238.160.181:11434/api/generate"
-    headers = {
-        "Content-Type": "application/json"
-    }
-    payload = {
-        "model": "gemma:2b",
-        "prompt": prompt
-    }
+def normalize_to_list(val):
+    if val is None:
+        return []
+    if isinstance(val, list):
+        return val
+    return [val]
+
+def call_slm_api_stream(prompt):
+    url = "http://34.170.213.214:11434/api/generate"
+    headers = {"Content-Type": "application/json"}
+    payload = {"model": "mistral:7b", "prompt": prompt}
     try:
-        response = requests.post(url, json=payload, headers=headers)
-        response.raise_for_status()
-        # Parse each line as a JSON object and collect the 'response' field
-        lines = response.text.strip().splitlines()
-        paragraph = ""
-        for line in lines:
-            try:
-                obj = json.loads(line)
-                paragraph += obj.get("response", "")
-            except Exception as e:
-                print(f"Error parsing line: {line}\n{e}")
-        print("SLM API Response (paragraph):")
-        print(paragraph)
-        return paragraph
+        with requests.post(url, json=payload, headers=headers, stream=True) as response:
+            response.raise_for_status()
+            buffer = ""
+            for line in response.iter_lines(decode_unicode=True):
+                if not line:
+                    continue
+                try:
+                    obj = json.loads(line)
+                    buffer += obj.get("response", "")
+                    # Yield each word as soon as it's available
+                    while " " in buffer:
+                        word, buffer = buffer.split(" ", 1)
+                        yield word + " "
+                except Exception as e:
+                    print(f"Error parsing line: {line}\n{e}")
+            # Yield any remaining buffer
+            if buffer:
+                yield buffer
     except requests.exceptions.RequestException as e:
         print(f"Error calling SLM API: {e}")
-        return None
+        yield "[SLM API error]"
 
-def main():
-    # Load ChromaDB collection
-    client = chromadb.PersistentClient(path=CHROMA_DATA_PATH)
-    collection = client.get_or_create_collection(COLLECTION_NAME)
-    print("Loaded ChromaDB collection.")
+# Load ChromaDB collection
+client = chromadb.PersistentClient(path=CHROMA_DATA_PATH)
+collection = client.get_or_create_collection(COLLECTION_NAME)
+
+def process_query_stream(user_prompt):
+
 
     # Load id_to_record mapping
     if os.path.exists(ID_TO_RECORD_PATH):
         with open(ID_TO_RECORD_PATH, "rb") as f:
             id_to_record = pickle.load(f)
-            print("Loaded id_to_record mapping.")
     else:
-        print(f"Mapping file {ID_TO_RECORD_PATH} not found.")
+        yield "Error: Mapping file not found."
         return
 
-    # --- PROMPT: Use keywords matching your concatenation approach ---
-    user_prompt = "appointment_status:Checked-Out"
-
     # Embed the prompt
-    prompt_embedding = model.encode([user_prompt])[0].tolist()  # Chroma expects list[float]
-    print("prompt_embedding length:", len(prompt_embedding))
-    print("prompt_embedding type:", type(prompt_embedding[0]))
+    prompt_embedding = model.encode([user_prompt])[0].tolist()
 
-    # --- Chroma Search ---
+    # Chroma Search
     try:
         results = collection.query(
             query_embeddings=[prompt_embedding],
             n_results=5,
             include=['metadatas', 'documents', 'distances']
         )
-        print("Chroma search successful.")
     except Exception as e:
-        print(f"Error during Chroma search: {e}")
+        yield f"Error during Chroma search: {e}"
         return
 
-    # --- Retrieve records by metadata and filter for 'Checked-Out' ---
+    # No filtering at all: include all returned records
     context_records = []
     metadatas = results.get("metadatas", [[]])[0]
     ids = results.get("ids", [[]])[0]
     for meta, idx in zip(metadatas, ids):
-        print("Retrieved index:", idx)
         if not meta:
             continue
-        if meta.get('appointment_status') == 'Checked-Out':
-            context_records.append(meta)
+        record = meta.copy()
+        for field in ID_FIELDS:
+            record[field] = normalize_to_list(meta.get(field))
+        context_records.append(record)
 
     if not context_records:
-        print("No relevant records found.")
+        yield "No relevant records found."
         return
 
-    # --- Build prompt for SLM API ---
+    # Build prompt for SLM API
     context_text = "\n".join(
-        f"Patient: {rec.get('patient_name', '[unknown]')}, Visit Type: {rec.get('visit_type', '[unknown]')}"
+        "; ".join(f"{k}: {v}" for k, v in rec.items())
         for rec in context_records
     )
     dynamic_prompt = (
         f"{context_text}\n\n"
-        f"List all patient names that were checked out and their visit type."
+        f"Based on the information above, write a concise summary (3 to 4 sentences) in natural language that highlights the most important details. "
+        f"If there are any names, descriptions, or key attributes, include them clearly without including digital ids. "
+        f"Where appropriate, provide a brief list of notable items or individuals mentioned, along with a short description for each."
     )
 
-    # --- Call SLM API ---
-    response = call_slm_api(dynamic_prompt)
-    print("SLM API Response:", response)
+    # Stream words from SLM API
+    for word in call_slm_api_stream(dynamic_prompt):
+        yield word
+
+# --- Flask App ---
+
+app = Flask(__name__)
+
+@app.route('/query', methods=['POST'])
+def query_endpoint():
+    data = request.get_json()
+    if not data or 'prompt' not in data:
+        return jsonify({"error": "Missing 'prompt' in request body"}), 400
+
+    def generate():
+        user_prompt = data['prompt']
+        for word in process_query_stream(user_prompt):
+            yield word
+
+    return Response(stream_with_context(generate()), mimetype='text/plain')
 
 if __name__ == "__main__":
-    main()
+    app.run(host="0.0.0.0", port=5000, debug=True)
