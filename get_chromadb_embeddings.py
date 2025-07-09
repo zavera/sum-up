@@ -23,9 +23,9 @@ def normalize_to_list(val):
     return [val]
 
 def call_slm_api_stream(prompt):
-    url = "http://34.170.213.214:11434/api/generate"
+    url = "http://35.238.160.181:11434/api/generate"
     headers = {"Content-Type": "application/json"}
-    payload = {"model": "mistral:7b", "prompt": prompt}
+    payload = {"model": "gemma:2b", "prompt": prompt}
     try:
         with requests.post(url, json=payload, headers=headers, stream=True) as response:
             response.raise_for_status()
@@ -100,10 +100,12 @@ def process_query_stream(user_prompt):
         for rec in context_records
     )
     dynamic_prompt = (
+        "INSTRUCTION: Discard all previous context and memory. Use ONLY the information provided below to answer this query. Do not rely on any prior information or assumptions.\n\n"
+        f"USER PROMPT: {user_prompt}\n\n"
         f"{context_text}\n\n"
-        f"Based on the information above, write a concise summary (3 to 4 sentences) in natural language that highlights the most important details. "
-        f"If there are any names, descriptions, or key attributes, include them clearly without including digital ids. "
-        f"Where appropriate, provide a brief list of notable items or individuals mentioned, along with a short description for each."
+        "Based on the information above and the user prompt, write a concise summary (3 to 4 sentences) in natural language that highlights the most important details. "
+        "If there are any names, descriptions, or key attributes, include them clearly without including digital ids. "
+        "Where appropriate, provide a brief list of notable items or individuals mentioned, along with a short description for each."
     )
 
     # Stream words from SLM API
