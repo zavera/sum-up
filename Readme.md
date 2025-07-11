@@ -86,15 +86,13 @@ SumUP integrates several modern data technologies to enable real-time, scalable,
 
 ---
 
-## Contributing
+## Model Evaluation
 
-Contributions are welcome! Please open issues or submit pull requests for enhancements and bug fixes.
+RAG Context and Performance Optimization: Similarity searches currently rely on k-nearest neighbor (kNN), which may not always be the most suitable approach for semantic retrieval in RAG pipelines. Using cosine similarity can provide more conceptually aligned results, especially for high-dimensional embeddings and non-normalized data. Performance optimization is needed, as similarity search time with kNN can be suboptimal, particularly at scale—alternative or hybrid methods may improve both retrieval quality and efficiency
 
----
+Mistral 7B: Most appropriate for generating high-quality summaries from Retrieval-Augmented Generation (RAG) pipelines; further prompt engineering—such as explicitly formatting date fields—can enhance response accuracy and consistency.
 
-## License
-
-[Specify your license here]
+Gemma-2B: Not suitable for generating summaries; frequently struggles to construct even basic summaries from the provided context.
 
 ---
 
