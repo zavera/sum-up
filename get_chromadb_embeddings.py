@@ -1,5 +1,4 @@
 from flask import Flask, request, Response, stream_with_context, jsonify
-import numpy as np
 from sentence_transformers import SentenceTransformer
 import requests
 import json
@@ -7,14 +6,21 @@ import pickle
 import os
 import chromadb
 
+# ---------- Configuration ----------
 EMBEDDING_DIM = 384
 CHROMA_DATA_PATH = "/tmp/chroma_db"
 COLLECTION_NAME = "appointments"
 ID_TO_RECORD_PATH = "/tmp/id_to_record.pkl"
-
-model = SentenceTransformer("all-MiniLM-L6-v2")
 ID_FIELDS = ["appointment_id", "visit_id", "resource_id"]
+FINETUNED_MODEL_PATH = "finetuned-all-MiniLM-L6-v2"
 
+# Similarity settings
+SIMILARITY_THRESHOLD = 0.4  # Minimum IP score to include
+TOP_K = 5                    # Top matching records to use
+
+# ---------- Load SentenceTransformer model ----------
+model = SentenceTransformer("all-MiniLM-L6-v2")
+# ---------- Normalize helper ----------
 def normalize_to_list(val):
     if val is None:
         return []
@@ -22,10 +28,11 @@ def normalize_to_list(val):
         return val
     return [val]
 
+# ---------- Stream LLM response from API ----------
 def call_slm_api_stream(prompt):
-    url = "http://35.238.160.181:11434/api/generate"
+    url = "http://34.170.213.214:11434/api/generate"
     headers = {"Content-Type": "application/json"}
-    payload = {"model": "gemma:2b", "prompt": prompt}
+    payload = {"model": "mistral:7b", "prompt": prompt}
     try:
         with requests.post(url, json=payload, headers=headers, stream=True) as response:
             response.raise_for_status()
@@ -36,98 +43,121 @@ def call_slm_api_stream(prompt):
                 try:
                     obj = json.loads(line)
                     buffer += obj.get("response", "")
-                    # Yield each word as soon as it's available
                     while " " in buffer:
                         word, buffer = buffer.split(" ", 1)
                         yield word + " "
                 except Exception as e:
                     print(f"Error parsing line: {line}\n{e}")
-            # Yield any remaining buffer
             if buffer:
                 yield buffer
     except requests.exceptions.RequestException as e:
         print(f"Error calling SLM API: {e}")
         yield "[SLM API error]"
 
-# Load ChromaDB collection
+# ---------- Initialize the Chroma collection with IP similarity ----------
 client = chromadb.PersistentClient(path=CHROMA_DATA_PATH)
-collection = client.get_or_create_collection(COLLECTION_NAME)
+collection = client.get_or_create_collection(
+    name=COLLECTION_NAME,
+    metadata={"hnsw:space": "ip"}  # Use inner product similarity
+)
 
+# ---------- Main search + LLM prompt generation logic ----------
 def process_query_stream(user_prompt):
-
-
-    # Load id_to_record mapping
-    if os.path.exists(ID_TO_RECORD_PATH):
-        with open(ID_TO_RECORD_PATH, "rb") as f:
-            id_to_record = pickle.load(f)
-    else:
+    if not os.path.exists(ID_TO_RECORD_PATH):
         yield "Error: Mapping file not found."
         return
 
-    # Embed the prompt
-    prompt_embedding = model.encode([user_prompt])[0].tolist()
+    # Load metadata if exists
+    with open(ID_TO_RECORD_PATH, "rb") as f:
+        id_to_record = pickle.load(f)
 
-    # Chroma Search
+    # 1. Embed user query
+    query_emb = model.encode(user_prompt).tolist()
+
+    # 2. Query Chroma collection using IP (inner product)
     try:
         results = collection.query(
-            query_embeddings=[prompt_embedding],
-            n_results=5,
-            include=['metadatas', 'documents', 'distances']
+            query_embeddings=[query_emb],
+            n_results=TOP_K,
+            include=["metadatas", "documents", "distances"]
         )
     except Exception as e:
         yield f"Error during Chroma search: {e}"
         return
 
-    # No filtering at all: include all returned records
+    if not results or not results["documents"][0]:
+        yield "No results returned from Chroma."
+        return
+
+    # 3. Convert negative distances to positive inner products
+    entries = zip(
+        results["distances"][0],  # distances returned as -IP
+        results["metadatas"][0],
+        results["documents"][0]
+    )
+    print(collection.metadata)
+    filtered_entries = []
+    for dist, meta, doc in entries:
+        print(dist,meta)
+        inner_product = dist
+        if inner_product >= SIMILARITY_THRESHOLD:
+            filtered_entries.append((inner_product, meta, doc))
+
+    if not filtered_entries:
+        yield "No entries passed the similarity threshold."
+        return
+
+    # 4. Sort by inner product (highest = most relevant)
+    sorted_entries = sorted(filtered_entries, key=lambda x: x[0], reverse=True)
+
+    # 5. Build context text
+    context_docs = []
     context_records = []
-    metadatas = results.get("metadatas", [[]])[0]
-    ids = results.get("ids", [[]])[0]
-    for meta, idx in zip(metadatas, ids):
-        if not meta:
-            continue
+    for score, meta, doc in sorted_entries:
+        context_docs.append(doc)
         record = meta.copy()
         for field in ID_FIELDS:
             record[field] = normalize_to_list(meta.get(field))
         context_records.append(record)
 
-    if not context_records:
-        yield "No relevant records found."
+    if not context_docs:
+        yield "No valid context documents."
         return
 
-    # Build prompt for SLM API
-    context_text = "\n".join(
-        "; ".join(f"{k}: {v}" for k, v in rec.items())
-        for rec in context_records
-    )
+    context_text = "\n".join(context_docs)
+
+    # 6. Build LLM prompt
     dynamic_prompt = (
-        "INSTRUCTION: Discard all previous context and memory. Use ONLY the information provided below to answer this query. Do not rely on any prior information or assumptions.\n\n"
+        "INSTRUCTION: Discard all previous context and memory. Use ONLY the information provided below "
+        "to answer this query. Do not rely on any prior information or assumptions.\n\n"
         f"USER PROMPT: {user_prompt}\n\n"
         f"{context_text}\n\n"
-        "Based on the information above and the user prompt, write a concise summary (3 to 4 sentences) in natural language that highlights the most important details. "
-        "If there are any names, descriptions, or key attributes, include them clearly without including digital ids. "
-        "Where appropriate, provide a brief list of notable items or individuals mentioned, along with a short description for each."
+        "Based on the information above and the user prompt, write a concise summary (3 to 4 sentences) in natural language "
+        "that highlights the most important details. Do not include IDs. List key elements clearly if appropriate."
     )
 
-    # Stream words from SLM API
+    # 7. Stream response from SLM
     for word in call_slm_api_stream(dynamic_prompt):
         yield word
 
-# --- Flask App ---
+# ---------- Flask API ----------
 
 app = Flask(__name__)
 
-@app.route('/query', methods=['POST'])
+@app.route("/query", methods=["POST"])
 def query_endpoint():
     data = request.get_json()
     if not data or 'prompt' not in data:
         return jsonify({"error": "Missing 'prompt' in request body"}), 400
 
+    user_prompt = data["prompt"]
+
     def generate():
-        user_prompt = data['prompt']
         for word in process_query_stream(user_prompt):
             yield word
 
-    return Response(stream_with_context(generate()), mimetype='text/plain')
+    return Response(stream_with_context(generate()), mimetype="text/plain")
 
+# ---------- Main Entrypoint ----------
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
