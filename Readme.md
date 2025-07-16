@@ -11,8 +11,8 @@ SumUP integrates several modern data technologies to enable real-time, scalable,
 | Component                  | Description                                                                                           |
 |----------------------------|-------------------------------------------------------------------------------------------------------|
 | **MySQL Database**         | Stores staging summaries and clinical data.                                                           |
-| **Debezium Connector**     | Captures change data (CDC) events from MySQL and streams them to Kafka topics in real time[3][6][11]. |
-| **Kafka**                  | Acts as the backbone for streaming CDC events and summary data between components[3][6][11].          |
+| **Debezium Connector**     | Captures change data (CDC) events from MySQL and streams them to Kafka topics in real time. |
+| **Kafka**                  | Acts as the backbone for streaming CDC events and summary data between components.          |
 | **Vector Embeddings**      | Converts clinical content into vector representations for efficient semantic search and retrieval.     |
 | **SLM on GCP**             | Small Language Model deployed as a service API endpoint for generating and serving summaries.          |
 
@@ -21,9 +21,9 @@ SumUP integrates several modern data technologies to enable real-time, scalable,
 ## Key Features
 
 - **Automated Change Data Capture:**
-    - Uses Debezium to monitor and stream all inserts, updates, and deletes from the MySQL database into Kafka topics, ensuring real-time data flow[2][3][6][11].
+    - Uses Debezium to monitor and stream all inserts, updates, and deletes from the MySQL database into Kafka topics, ensuring real-time data flow.
 - **Real-Time Data Pipeline:**
-    - Kafka serves as the central message bus, enabling scalable and decoupled processing of clinical content updates[3][6][11].
+    - Kafka serves as the central message bus, enabling scalable and decoupled processing of clinical content updates.
 - **Semantic Summarization:**
     - Incoming clinical data is transformed into vector embeddings and processed by an SLM to generate concise, context-aware summaries.
 - **Cloud-Native API:**
@@ -38,7 +38,7 @@ SumUP integrates several modern data technologies to enable real-time, scalable,
 1. **Data Ingestion:**
     - Clinical summaries and content are staged in a MySQL database.
 2. **Change Data Capture:**
-    - Debezium connector monitors MySQL and streams change events (CDC) into Kafka topics[2][3][6][11].
+    - Debezium connector monitors MySQL and streams change events (CDC) into Kafka topics.
 3. **Vectorization:**
     - Kafka consumers process the data, generating vector embeddings for semantic understanding.
 4. **Summarization:**
@@ -61,9 +61,9 @@ SumUP integrates several modern data technologies to enable real-time, scalable,
 ### Quick Start
 
 1. **Spin up MySQL, Kafka, and Debezium:**
-    - Use Docker Compose to orchestrate containers for MySQL, Kafka, Zookeeper, and Debezium[2][9].
+    - Use Docker Compose to orchestrate containers for MySQL, Kafka, Zookeeper, and Debezium.
 2. **Configure Debezium Connector:**
-    - Register the Debezium MySQL source connector to monitor the target database and stream changes into Kafka[3][6][11].
+    - Register the Debezium MySQL source connector to monitor the target database and stream changes into Kafka
 3. **Set Up Vectorization and SLM:**
     - Deploy vector embedding services and the SLM API on GCP.
 4. **Integrate API:**
@@ -86,17 +86,6 @@ SumUP integrates several modern data technologies to enable real-time, scalable,
 
 ---
 
-## Contributing
-
-Contributions are welcome! Please open issues or submit pull requests for enhancements and bug fixes.
-
----
-
-## License
-
-[Specify your license here]
-
----
 
 ## Acknowledgments
 
