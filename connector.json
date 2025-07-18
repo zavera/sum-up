@@ -11,7 +11,7 @@
           "skipped.operations": "d",
           "topic.prefix": "appointments",
           "database.include.list": "scheduler",
-          "table.include.list": "scheduler.appointment_summary,scheduler.visit_summary,scheduler.study_summary,scheduler.subject_summary,scheduler.site_summary",
+          "table.include.list": "scheduler.appointment_summary",
           "schema.history.internal.kafka.bootstrap.servers": "kafka:9092",
           "schema.history.internal.kafka.topic": "scheduler.summary.schema.history",
           "include.schema.changes": "false",

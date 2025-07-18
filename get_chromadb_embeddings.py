@@ -11,15 +11,16 @@ EMBEDDING_DIM = 384
 CHROMA_DATA_PATH = "/tmp/chroma_db"
 COLLECTION_NAME = "appointments"
 ID_TO_RECORD_PATH = "/tmp/id_to_record.pkl"
-ID_FIELDS = ["appointment_id", "visit_id", "resource_id"]
-FINETUNED_MODEL_PATH = "finetuned-all-MiniLM-L6-v2"
+ID_FIELDS = ["appointment_id"]
+FINETUNED_MODEL_PATH = "/Users/user/Desktop/ai-summarize/finetuned-all-MiniLM-L6-v2"
 
 # Similarity settings
-SIMILARITY_THRESHOLD = 0.4  # Minimum IP score to include
+SIMILARITY_THRESHOLD = 0.5  # Minimum IP score to include
 TOP_K = 5                    # Top matching records to use
 
 # ---------- Load SentenceTransformer model ----------
-model = SentenceTransformer("all-MiniLM-L6-v2")
+#model = SentenceTransformer("all-MiniLM-L6-v2")
+model = SentenceTransformer(FINETUNED_MODEL_PATH)
 # ---------- Normalize helper ----------
 def normalize_to_list(val):
     if val is None:
@@ -30,7 +31,7 @@ def normalize_to_list(val):
 
 # ---------- Stream LLM response from API ----------
 def call_slm_api_stream(prompt):
-    url = "http://34.170.213.214:11434/api/generate"
+    url = "http://34.123.0.108:11434/api/generate"
     headers = {"Content-Type": "application/json"}
     payload = {"model": "mistral:7b", "prompt": prompt}
     try:
@@ -78,8 +79,8 @@ def process_query_stream(user_prompt):
     try:
         results = collection.query(
             query_embeddings=[query_emb],
-            n_results=TOP_K,
             include=["metadatas", "documents", "distances"]
+            # No top_k: retrieve all items in the index
         )
     except Exception as e:
         yield f"Error during Chroma search: {e}"
@@ -89,28 +90,27 @@ def process_query_stream(user_prompt):
         yield "No results returned from Chroma."
         return
 
-    # 3. Convert negative distances to positive inner products
+    # 3. Filter by inner product score (SIMILARITY_THRESHOLD)
     entries = zip(
-        results["distances"][0],  # distances returned as -IP
+        results["distances"][0],  # distances = inner product scores
         results["metadatas"][0],
         results["documents"][0]
     )
-    print(collection.metadata)
+
     filtered_entries = []
     for dist, meta, doc in entries:
-        print(dist,meta)
         inner_product = dist
         if inner_product >= SIMILARITY_THRESHOLD:
             filtered_entries.append((inner_product, meta, doc))
-
+    print(filtered_entries)
     if not filtered_entries:
         yield "No entries passed the similarity threshold."
         return
 
-    # 4. Sort by inner product (highest = most relevant)
+    # 4. Sort entries by relevance (highest IP score first)
     sorted_entries = sorted(filtered_entries, key=lambda x: x[0], reverse=True)
 
-    # 5. Build context text
+# 5. Build context text
     context_docs = []
     context_records = []
     for score, meta, doc in sorted_entries:
@@ -129,12 +129,14 @@ def process_query_stream(user_prompt):
     # 6. Build LLM prompt
     dynamic_prompt = (
         "INSTRUCTION: Discard all previous context and memory. Use ONLY the information provided below "
-        "to answer this query. Do not rely on any prior information or assumptions.\n\n"
+        "to answer this query. Do not rely on any prior information or assumptions. \n\n"
         f"USER PROMPT: {user_prompt}\n\n"
         f"{context_text}\n\n"
         "Based on the information above and the user prompt, write a concise summary (3 to 4 sentences) in natural language "
         "that highlights the most important details. Do not include IDs. List key elements clearly if appropriate."
     )
+
+    print(dynamic_prompt)
 
     # 7. Stream response from SLM
     for word in call_slm_api_stream(dynamic_prompt):

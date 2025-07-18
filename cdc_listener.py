@@ -7,10 +7,6 @@ from create_chromadb_embeddings import embed_message
 def main():
     consumer = KafkaConsumer(
         'appointments.scheduler.appointment_summary',
-        'appointments.scheduler.visit_summary',
-        'appointments.scheduler.study_summary',
-        'appointments.scheduler.subject_summary',
-        'appointments.scheduler.site_summary',
         bootstrap_servers=['localhost:29092'],
         value_deserializer=lambda m: json.loads(m.decode('utf-8')) if m else None,
         group_id='faiss-processor-group',

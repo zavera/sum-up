@@ -8,7 +8,7 @@ from sentence_transformers import InputExample
 MYSQL_HOST = 'localhost'
 MYSQL_PORT = 3306
 MYSQL_USER = 'root'
-MYSQL_PASS = 'password'
+MYSQL_PASS = 'Ambzhere00!'
 MYSQL_DB = 'scheduler'
 N_ROWS = 110  # updated as requested
 NUM_NEGATIVES_PER_QUERY = 1  # optional negative pairs per row
@@ -39,10 +39,10 @@ def make_summary_text(row):
     if row.get("appointment_status"):
         parts.append(f"Status: {row['appointment_status']}.")
     if row.get("appointment_status_reason"):
-        parts.append(f"Reason: {row['appointment_status_reason']}.")
+        parts.append(f"appointment status is because of {row['appointment_status_reason']}.")
     comment = str(row.get("comment") or "").strip()
     if comment:
-        parts.append(f"Comment: {comment}")
+        parts.append(f"Comment associated with the appointment is {comment}")
     return " ".join(parts)
 
 def make_query_text(row):

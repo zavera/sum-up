@@ -10,10 +10,12 @@ EMBEDDING_DIM = 384
 CHROMA_DATA_PATH = "/tmp/chroma_db"
 COLLECTION_NAME = "appointments"
 ID_TO_RECORD_PATH = "/tmp/id_to_record.pkl"
-ID_FIELDS = ["appointment_id", "visit_id", "resource_id"]
+ID_FIELDS = ["appointment_id"]
+FINETUNED_MODEL_PATH = "/Users/user/Desktop/ai-summarize/finetuned-all-MiniLM-L6-v2"
 
 # Load embedding model
-model = SentenceTransformer("all-MiniLM-L6-v2")
+#model = SentenceTransformer("all-MiniLM-L6-v2")
+model = SentenceTransformer(FINETUNED_MODEL_PATH)
 
 
 # Initialize ChromaDB persistent client and collection
@@ -69,7 +71,7 @@ def structured_to_text(data):
         parts.append(f"This appointment is part of the clinical study titled '{study_name}'.")
 
     if patient_name:
-        parts.append(f"It was scheduled for patient '{patient_name}'.")
+        parts.append(f"It was scheduled for patient with with name '{patient_name}'.")
     elif patient_id:
         parts.append(f"It was scheduled for patient with ID {patient_id}.")
 
