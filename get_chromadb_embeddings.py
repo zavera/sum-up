@@ -15,12 +15,13 @@ ID_FIELDS = ["appointment_id"]
 FINETUNED_MODEL_PATH = "/Users/user/Desktop/ai-summarize/finetuned-all-MiniLM-L6-v2"
 
 # Similarity settings
-SIMILARITY_THRESHOLD = 0.5  # Minimum IP score to include
-TOP_K = 5                    # Top matching records to use
+SIMILARITY_THRESHOLD = 0.5
 
 # ---------- Load SentenceTransformer model ----------
 #model = SentenceTransformer("all-MiniLM-L6-v2")
 model = SentenceTransformer(FINETUNED_MODEL_PATH)
+
+
 # ---------- Normalize helper ----------
 def normalize_to_list(val):
     if val is None:
@@ -28,6 +29,7 @@ def normalize_to_list(val):
     if isinstance(val, list):
         return val
     return [val]
+
 
 # ---------- Stream LLM response from API ----------
 def call_slm_api_stream(prompt):
@@ -55,12 +57,34 @@ def call_slm_api_stream(prompt):
         print(f"Error calling SLM API: {e}")
         yield "[SLM API error]"
 
+
 # ---------- Initialize the Chroma collection with IP similarity ----------
 client = chromadb.PersistentClient(path=CHROMA_DATA_PATH)
 collection = client.get_or_create_collection(
     name=COLLECTION_NAME,
     metadata={"hnsw:space": "ip"}  # Use inner product similarity
 )
+import re
+
+
+def get_patient_name(user_prompt):
+    name_pattern = r'([A-Za-z0-9+/]{20,}==\s[A-Za-z0-9+/]{20,}==)'
+    name_matches = re.findall(name_pattern, user_prompt)
+    return name_matches
+
+
+def get_patient_mrn(user_prompt, name_matches):
+    mrn_pattern = r'([A-Za-z0-9+/]{20,}==)'
+    mrn_only_prompt = ''
+    if len(name_matches):
+        for name in name_matches:
+            mrn_only_prompt = user_prompt.replace(name,"")
+        mrn_matches = re.findall(mrn_pattern, mrn_only_prompt)
+    else:
+        mrn_matches = re.findall(mrn_pattern, user_prompt)
+    return mrn_matches
+
+
 
 # ---------- Main search + LLM prompt generation logic ----------
 def process_query_stream(user_prompt):
@@ -97,11 +121,30 @@ def process_query_stream(user_prompt):
         results["documents"][0]
     )
 
+    name_matches = get_patient_name(user_prompt)
+    mrn_matches = get_patient_mrn(user_prompt, name_matches)
+
+    print(mrn_matches)
+    print(name_matches)
+    has_name_match = lambda all_matches, m: any(
+        match in m.get('patient_name', '') for match in all_matches)
+    has_mrn_match = lambda all_matches, m: any(
+    match in m.get('patient_mrn', '') for match in all_matches)
+
     filtered_entries = []
     for dist, meta, doc in entries:
+
         inner_product = dist
+        print(inner_product,meta)
         if inner_product >= SIMILARITY_THRESHOLD:
-            filtered_entries.append((inner_product, meta, doc))
+
+            if not name_matches and not mrn_matches:
+                filtered_entries.append((inner_product, meta, doc))
+            else:
+                if has_name_match(name_matches,meta) or has_mrn_match(mrn_matches,meta):
+                    print(meta)
+                    filtered_entries.append((inner_product, meta, doc))
+
     print(filtered_entries)
     if not filtered_entries:
         yield "No entries passed the similarity threshold."
@@ -110,7 +153,7 @@ def process_query_stream(user_prompt):
     # 4. Sort entries by relevance (highest IP score first)
     sorted_entries = sorted(filtered_entries, key=lambda x: x[0], reverse=True)
 
-# 5. Build context text
+    # 5. Build context text
     context_docs = []
     context_records = []
     for score, meta, doc in sorted_entries:
@@ -132,19 +175,21 @@ def process_query_stream(user_prompt):
         "to answer this query. Do not rely on any prior information or assumptions. \n\n"
         f"USER PROMPT: {user_prompt}\n\n"
         f"{context_text}\n\n"
-        "Based on the information above and the user prompt, write a concise summary (3 to 4 sentences) in natural language "
-        "that highlights the most important details. Do not include IDs. List key elements clearly if appropriate."
+        "Based on the information above and the user prompt, provide elaborated description in natural language "
+        "that highlights the most important details. If multiple appointments are obtained then show description of"
+        " each appointment in a separate bullet point without including internal appointment id."
     )
 
-    print(dynamic_prompt)
 
     # 7. Stream response from SLM
     for word in call_slm_api_stream(dynamic_prompt):
         yield word
 
+
 # ---------- Flask API ----------
 
 app = Flask(__name__)
+
 
 @app.route("/query", methods=["POST"])
 def query_endpoint():
@@ -159,6 +204,7 @@ def query_endpoint():
             yield word
 
     return Response(stream_with_context(generate()), mimetype="text/plain")
+
 
 # ---------- Main Entrypoint ----------
 if __name__ == "__main__":
