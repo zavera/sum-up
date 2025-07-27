@@ -86,7 +86,13 @@ SumUP integrates several modern data technologies to enable real-time, scalable,
 
 ---
 
+## Next Steps
 
+Accuracy was significantly improved by adding regex extraction of patient name and patienat mrn - these enabled a more targgeted indexing of vector database and provided most relevant context to SLM. However there is room for improvements. As next steps 
+I'd like to further enhance similarity search by providing more targeted parameters such as weighted encoding to text and NLP extraction of other keywords (like study_name, visit_template etc) that can be mapped to structured data and used as meand of filtering the contxt for SLM
+                                        
+
+---
 ## Acknowledgments
 
 - [Debezium](https://debezium.io/) for CDC technology.
