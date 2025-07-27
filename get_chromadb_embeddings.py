@@ -115,7 +115,7 @@ def process_query_stream(user_prompt):
         else:
             where = {"$or": clauses}
 
-
+    print(where)
 
     # 2. Query Chroma collection using IP (inner product)
     try:
