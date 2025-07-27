@@ -15,7 +15,7 @@ ID_FIELDS = ["appointment_id"]
 FINETUNED_MODEL_PATH = "/Users/user/Desktop/ai-summarize/finetuned-all-MiniLM-L6-v2"
 
 # Similarity settings
-SIMILARITY_THRESHOLD = 0.5
+SIMILARITY_THRESHOLD = 0.4
 
 # ---------- Load SentenceTransformer model ----------
 #model = SentenceTransformer("all-MiniLM-L6-v2")
@@ -99,12 +99,31 @@ def process_query_stream(user_prompt):
     # 1. Embed user query
     query_emb = model.encode(user_prompt).tolist()
 
+    name_matches = get_patient_name(user_prompt)
+    mrn_matches = get_patient_mrn(user_prompt, name_matches)
+    where = {}
+
+    clauses = []
+    if name_matches:
+        clauses.append({"patient_name": {"$in": name_matches}})
+    if mrn_matches:
+        clauses.append({"patient_mrn": {"$in": mrn_matches}})
+
+    if clauses:
+        if len(clauses) == 1:
+            where = clauses[0]
+        else:
+            where = {"$or": clauses}
+
+
+
     # 2. Query Chroma collection using IP (inner product)
     try:
         results = collection.query(
             query_embeddings=[query_emb],
-            include=["metadatas", "documents", "distances"]
-            # No top_k: retrieve all items in the index
+            include=["metadatas", "documents", "distances"],
+            where=where if where else None,
+            # optionally set n_results if you want to limit
         )
     except Exception as e:
         yield f"Error during Chroma search: {e}"
@@ -121,15 +140,8 @@ def process_query_stream(user_prompt):
         results["documents"][0]
     )
 
-    name_matches = get_patient_name(user_prompt)
-    mrn_matches = get_patient_mrn(user_prompt, name_matches)
 
-    print(mrn_matches)
-    print(name_matches)
-    has_name_match = lambda all_matches, m: any(
-        match in m.get('patient_name', '') for match in all_matches)
-    has_mrn_match = lambda all_matches, m: any(
-    match in m.get('patient_mrn', '') for match in all_matches)
+    print(entries)
 
     filtered_entries = []
     for dist, meta, doc in entries:
@@ -137,13 +149,7 @@ def process_query_stream(user_prompt):
         inner_product = dist
         print(inner_product,meta)
         if inner_product >= SIMILARITY_THRESHOLD:
-
-            if not name_matches and not mrn_matches:
-                filtered_entries.append((inner_product, meta, doc))
-            else:
-                if has_name_match(name_matches,meta) or has_mrn_match(mrn_matches,meta):
-                    print(meta)
-                    filtered_entries.append((inner_product, meta, doc))
+            filtered_entries.append((inner_product, meta, doc))
 
     print(filtered_entries)
     if not filtered_entries:
